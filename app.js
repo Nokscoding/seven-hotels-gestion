@@ -346,8 +346,8 @@ async function loadAll(){
 }
 function readableError(e){
  const names={
-  request_not_found:"Demande introuvable.",
-  request_not_pending:"Cette demande a déjà été traitée.",
+  request_not_found:"Réservation introuvable.",
+  request_not_pending:"Cette réservation a déjà été traitée.",
   room_not_found_in_hotel:"Cette chambre ne fait pas partie de l'établissement.",
   room_not_ready_today:"Cette chambre n'est pas prête pour une arrivée aujourd'hui.",
   room_out_of_service:"Cette chambre est indisponible (maintenance ou hors service).",
@@ -369,7 +369,7 @@ function readableError(e){
 function openAllocation(id){
  if(!canHandle()||!navigator.onLine){flash("Une connexion est nécessaire pour confirmer les réservations.");return;}
  const req=state.requests.find(r=>r.id===id);
- if(!req||req.status!=="pending"||req.kind!=="stay")return flash("Cette demande ne peut plus être attribuée.");
+ if(!req||req.status!=="pending"||req.kind!=="stay")return flash("Cette réservation ne peut plus être attribuée.");
  state.allocatingRequestId=id;
  const options=roomOptionsFor(req).sort((a,b)=>String(a.number).localeCompare(String(b.number)));
  const select=el("allocationRoom"),message=el("allocationMessage");
