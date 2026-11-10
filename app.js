@@ -509,33 +509,38 @@ el("roleForm").addEventListener("submit",async e=>{
   configureRoleSelect("roleSelect","roleHotelWrap","roleHotel");
  }catch(error){console.error(error);flash(error.code==="23505"?"Cet accès existe déjà.":"Attribution impossible : "+readableError(error));}
 });
+el("staffPasswordVisible").addEventListener("change",e=>{
+ el("staffPassword").type=e.target.checked?"text":"password";
+});
 el("inviteForm").addEventListener("submit",async e=>{
  e.preventDefault();
- if(!canManageAccess()||!navigator.onLine)return flash("Accès refusé ou connexion indisponible.");
- const data=new FormData(e.target);
- const role=String(data.get("role")||"");
- if(!canAssignRole(role))return flash("Vous n'avez pas le droit d'attribuer ce rôle.");
+ const result=el("inviteResult"),button=el("inviteSubmit");
+ if(!canManageAccess()||!navigator.onLine){result.textContent="Accès refusé ou connexion indisponible.";return;}
+ const data=new FormData(e.target),role=String(data.get("role")||"");
+ if(!canAssignRole(role)){result.textContent="Vous ne pouvez pas attribuer ce rôle.";return;}
  const hotel_id=globalRole(role)?null:(leadership()?String(data.get("hotel_id")||""):state.hotelId);
- if(!globalRole(role)&&!state.hotels.some(h=>h.id===hotel_id))return flash("Établissement invalide.");
+ if(!globalRole(role)&&!state.hotels.some(h=>h.id===hotel_id)){result.textContent="Sélectionnez un établissement valide.";return;}
  const email=String(data.get("email")||"").trim().toLowerCase();
  const full_name=String(data.get("full_name")||"").trim();
- if(!email.includes("@")||full_name.length<2)return flash("Renseignez un nom et une adresse e-mail valides.");
- const button=el("inviteSubmit"),result=el("inviteResult");
- button.disabled=true;result.textContent="Envoi de l'invitation en cours…";
+ const password=String(data.get("password")||"");
+ if(!email.includes("@")||full_name.length<2){result.textContent="Nom et adresse e-mail invalides.";return;}
+ if(password.length<12||password.length>128||!/[^A-Za-z0-9]/.test(password)||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password)||/^\s|\s$/.test(password)){
+  result.textContent="Mot de passe : 12 caractères minimum, avec des lettres, des chiffres et un symbole.";return;
+ }
+ button.disabled=true;result.textContent="Création sécurisée du compte en cours…";
  try{
-  const response=await sb.functions.invoke("seven-invite-staff",{
-   body:{email,full_name,role,hotel_id}
-  });
+  const response=await sb.functions.invoke("seven-create-staff",{body:{email,full_name,role,hotel_id,password}});
   if(response.error)throw response.error;
-  if(!response.data?.ok)throw Error(response.data?.error||"Invitation non créée");
-  result.textContent="Invitation envoyée à "+email+". Le collaborateur devra activer son compte.";
+  if(!response.data?.ok)throw Error(response.data?.error||"Création impossible");
+  result.textContent="Compte "+email+" créé et accès activé. Communiquez les identifiants par un canal privé.";
   e.target.reset();
+  el("staffPassword").type="password";
   configureRoleSelect("inviteRole","inviteHotelWrap","inviteHotel");
   await loadAll();
  }catch(error){
-  console.error("Seven invitation failed",error);
-  result.textContent="Invitation impossible. Vérifiez l'autorisation du compte, le paramétrage des e-mails Supabase et l'adresse fournie.";
- }finally{button.disabled=false;}
+  console.error("Seven staff provision failed",error?.message||"unknown");
+  result.textContent="Échec de création : ce compte existe peut-être déjà, le mot de passe est invalide ou l'accès est refusé. Aucun e-mail d'invitation n'a été envoyé.";
+ }finally{el("staffPassword").value="";button.disabled=false;}
 });
 el("propertiesGrid").addEventListener("click",async e=>{
  const b=e.target.closest("[data-select-property]");
