@@ -1,0 +1,14 @@
+# Seven Gestion — portail privé distinct du site vitrine Seven Hotels
+[build]
+  publish = "."
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    X-Frame-Options = "DENY"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Robots-Tag = "noindex, nofollow"
+    Cache-Control = "no-store"
+
+# Pour un portail admin, la vérification des droits se fait côté Supabase (Auth + RLS).
