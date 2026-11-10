@@ -2,8 +2,8 @@
 const cfg=window.SEVEN_CONFIG||{},sb=(cfg.url&&cfg.publishableKey&&window.supabase)?window.supabase.createClient(cfg.url,cfg.publishableKey):null;
 const state={user:null,roles:[],hotels:[],hotelId:"",view:"dashboard",requests:[],rooms:[],roomTypes:[],stays:[],services:[],attendance:[],rfid:[],allocatingRequestId:null};
 const el=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-const names={dashboard:["Vue d'ensemble","Toutes les informations essentielles de votre établissement."],requests:["Demandes de réservation","Suivez et traitez les demandes de vos visiteurs."],stays:["Séjours & arrivées","Gérez les confirmations, arrivées et départs des clients."],rooms:["Gestion des chambres","Suivez la disponibilité opérationnelle des chambres."],services:["Espaces et services","Gérez les salles, restaurants et installations."],attendance:["Présences","Enregistrez les entrées et sorties de votre équipe."],access:["Accès et permissions","Contrôlez les autorisations par établissement."],notifications:["Notifications","Suivez les événements importants de vos établissements."],management:["Espace responsables","Pilotage des équipes, de l’hôtel et des opérations."],properties:["Établissements","Gérez les hôtels et appartements de la chaîne Seven."],rfid:["Cartes RFID","Registre et préparation de la gestion des accès."]};
-const statusNames={pending:"En attente",confirmed:"Confirmée",checked_in:"Occupée",checked_out:"Terminé",no_show:"Non-présenté",approved:"Approuvée",declined:"Refusée",cancelled:"Annulée",available:"Disponible",occupied:"Occupée",cleaning:"Nettoyage",maintenance:"Maintenance",out_of_service:"Hors service"};
+const names={dashboard:["Vue d'ensemble","Toutes les informations essentielles de votre établissement."],requests:["Réservations à confirmer","Contactez les clients, vérifiez les disponibilités et confirmez les réservations."],stays:["Séjours & arrivées","Gérez les confirmations, arrivées et départs des clients."],rooms:["Gestion des chambres","Suivez la disponibilité opérationnelle des chambres."],services:["Espaces et services","Gérez les salles, restaurants et installations."],attendance:["Présences","Enregistrez les entrées et sorties de votre équipe."],access:["Accès et permissions","Contrôlez les autorisations par établissement."],notifications:["Notifications","Suivez les événements importants de vos établissements."],management:["Espace responsables","Pilotage des équipes, de l’hôtel et des opérations."],properties:["Établissements","Gérez les hôtels et appartements de la chaîne Seven."],rfid:["Cartes RFID","Registre et préparation de la gestion des accès."]};
+const statusNames={pending:"À contacter",confirmed:"Confirmée",checked_in:"Occupée",checked_out:"Terminé",no_show:"Non-présenté",approved:"Approuvée",declined:"Refusée",cancelled:"Annulée",available:"Disponible",occupied:"Occupée",cleaning:"Nettoyage",maintenance:"Maintenance",out_of_service:"Hors service"};
 const roleNames={supervisor:"Modérateur général",director:"Directeur général",manager:"Gérant",reception:"Réceptionniste",housekeeping:"Entretien",accountant:"Comptabilité"};
 function flash(message){el("flash").textContent=message;el("flash").scrollIntoView({block:"nearest",behavior:"smooth"});}
 function offline(){el("connectionState").textContent=navigator.onLine?"● En ligne":"● Hors connexion";el("connectionState").classList.toggle("offline",!navigator.onLine);}
@@ -90,14 +90,17 @@ function renderRequests(){
  const rows=state.requests.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).map(r=>{
   let action="—";
   if(canHandle()&&r.status==="pending"){
-    action='<div class="inline-actions">'+(r.kind==="stay"?'<button type="button" class="action-button action-primary" data-allocate="'+esc(r.id)+'">Attribuer chambre</button>':'<span class="hint">À organiser</span>')+'<button type="button" class="action-button action-danger" data-decline="'+esc(r.id)+'">Refuser</button></div>';
+    action='<div class="inline-actions">'+(r.kind==="stay"?'<button type="button" class="action-button action-primary" data-allocate="'+esc(r.id)+'">Contacter & confirmer</button>':'<button type="button" class="action-button action-primary" data-service-approve="'+esc(r.id)+'">Confirmer le service</button>')+'<button type="button" class="action-button action-danger" data-decline="'+esc(r.id)+'">Refuser</button></div>';
   } else if(r.reservation_id){
     const stay=state.stays.find(s=>s.id===r.reservation_id);
     action='<span class="reservation-ref">'+esc(stay?.reference||"Séjour lié")+'</span>';
   }
-  return '<tr><td>'+esc(r.guest_name)+'</td><td>'+esc(({stay:"Chambre",apartment:"Appartement",restaurant:"Restaurant",event:"Événement",fitness:"Sport & bien-être"})[r.kind]||r.kind)+'</td><td>'+esc(r.guest_phone)+'</td><td>'+esc(r.guests)+'</td><td>'+esc(r.start_date)+(r.end_date?' → '+esc(r.end_date):'')+'</td><td>'+pill(r.status)+'</td><td>'+action+'</td></tr>';
+  const phone=String(r.guest_phone||"").replace(/[^+0-9]/g,"");
+  const whatsapp=String(r.guest_phone||"").replace(/\D/g,"");
+  const contact='<div class="contact-actions"><a href="tel:'+esc(phone)+'">Appeler ↗</a>'+(whatsapp.startsWith("243")?'<a href="https://wa.me/'+esc(whatsapp)+'" target="_blank" rel="noopener noreferrer">WhatsApp ↗</a>':"")+(r.guest_email?'<a href="mailto:'+esc(r.guest_email)+'">E-mail ↗</a>':"")+'</div>';
+  return '<tr><td>'+esc(r.guest_name)+'</td><td>'+esc(({stay:"Chambre",apartment:"Appartement",restaurant:"Restaurant",event:"Événement",fitness:"Sport & bien-être"})[r.kind]||r.kind)+'</td><td>'+esc(r.guest_phone)+'</td><td>'+esc(r.guests)+'</td><td>'+esc(r.start_date)+(r.end_date?' → '+esc(r.end_date):'')+'</td><td>'+pill(r.status)+'</td><td>'+contact+'</td><td>'+action+'</td></tr>';
  });
- el("requestsTable").innerHTML=table(["Client","Type","Téléphone","Pers.","Dates","Statut","Décision"],rows);
+ el("requestsTable").innerHTML=table(["Client","Type","Téléphone","Pers.","Dates","Statut","Contact","Décision"],rows);
  el("recentRequests").innerHTML=table(["Client","Type","Date","Statut"],state.requests.slice().sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,5).map(r=>'<tr><td>'+esc(r.guest_name)+'</td><td>'+esc(r.kind)+'</td><td>'+esc(r.start_date)+'</td><td>'+pill(r.status)+'</td></tr>'));
  el("requestCount").textContent=state.requests.filter(r=>r.status==="pending").length;
 }
@@ -332,7 +335,8 @@ function openAllocation(id){
   const type=state.roomTypes.find(t=>t.id===room.room_type_id);
   return '<option value="'+esc(room.id)+'">N° '+esc(room.number)+' · '+esc(type?.name||"Chambre")+' · '+esc(money(type?.base_price||0,type?.currency||"USD"))+' / nuit</option>';
  }).join("");
- el("allocationSummary").innerHTML='<strong>'+esc(req.guest_name)+'</strong><div>Du '+esc(req.start_date)+' au '+esc(req.end_date)+' · '+esc(req.guests)+' personne(s)</div><div>'+esc(currentHotel()?.name||"Établissement")+'</div>';
+ el("allocationSummary").innerHTML='<strong>'+esc(req.guest_name)+'</strong><div>Du '+esc(req.start_date)+' au '+esc(req.end_date)+' · '+esc(req.guests)+' personne(s)</div><div>'+esc(currentHotel()?.name||"Établissement")+'</div><div>Contact : '+esc(req.guest_phone)+(req.guest_email?' · '+esc(req.guest_email):'')+'</div>';
+  el("contactVerified").checked=false;
  message.textContent=options.length?"":"Aucune chambre disponible et adaptée à cette demande. Vérifiez les dates ou l'inventaire.";
  el("confirmAllocation").disabled=!options.length;
  el("allocationDialog").showModal();
@@ -341,6 +345,7 @@ async function confirmAllocation(e){
  e.preventDefault();
  const id=state.allocatingRequestId,roomId=el("allocationRoom").value;
  if(!id||!roomId||!navigator.onLine)return;
+  if(!el("contactVerified").checked){el("allocationMessage").textContent="Veuillez d’abord contacter le client et vérifier les disponibilités.";return;}
  const button=el("confirmAllocation");button.disabled=true;button.textContent="Confirmation…";
  try{
   const res=await sb.rpc("seven_accept_booking_request",{p_request_id:id,p_room_id:roomId});
@@ -354,14 +359,28 @@ async function confirmAllocation(e){
   await loadAll();
  }finally{button.disabled=false;button.textContent="Confirmer la réservation";}
 }
+async function confirmServiceRequest(id){
+ const req=state.requests.find(r=>r.id===id);
+ if(!req||req.status!=="pending"||!canHandle())return;
+ if(!window.confirm("Avez-vous contacté "+req.guest_name+" et vérifié les détails avant de confirmer ?"))return;
+ try{
+  const r=await sb.rpc("seven_resolve_service_request",{p_request_id:id,p_approved:true,p_note:null});
+  if(r.error)throw r.error;
+  flash("Réservation de service confirmée. Prévenez le client des détails.");
+  await loadAll();
+ }catch(err){console.error("Service confirmation failed",err);flash(readableError(err));}
+}
 async function declineRequest(id){
  if(!canHandle()||!navigator.onLine)return flash("Connexion nécessaire.");
  const reason=window.prompt("Motif du refus (facultatif) :", "");
  if(reason===null)return;
  try{
-  const r=await sb.rpc("seven_decline_booking_request",{p_request_id:id,p_reason:reason||null});
+  const request=state.requests.find(item=>item.id===id);
+   const r=request&&request.kind!=="stay"&&request.kind!=="apartment"
+    ?await sb.rpc("seven_resolve_service_request",{p_request_id:id,p_approved:false,p_note:reason||null})
+    :await sb.rpc("seven_decline_booking_request",{p_request_id:id,p_reason:reason||null});
   if(r.error)throw r.error;
-  flash("Demande refusée.");await loadAll();
+  flash("Réservation refusée.");await loadAll();
  }catch(e){console.error(e);flash(readableError(e));}
 }
 async function transitionStay(id,action){
@@ -394,8 +413,9 @@ el("hotelSwitcher").addEventListener("change",async e=>{state.hotelId=e.target.v
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>goto(b.dataset.view)));
 document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>goto(b.dataset.goto)));
 el("requestsTable").addEventListener("click",e=>{
- const assign=e.target.closest("[data-allocate]"),decline=e.target.closest("[data-decline]");
+ const assign=e.target.closest("[data-allocate]"),approve=e.target.closest("[data-service-approve]"),decline=e.target.closest("[data-decline]");
  if(assign)openAllocation(assign.dataset.allocate);
+ else if(approve)confirmServiceRequest(approve.dataset.serviceApprove);
  else if(decline)declineRequest(decline.dataset.decline);
 });
 el("staysTable").addEventListener("click",e=>{
