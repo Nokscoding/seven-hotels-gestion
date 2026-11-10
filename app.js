@@ -82,7 +82,7 @@ function showApp(){
 }
 async function bootstrap(){if(!sb){showLogin("La configuration d'accès au serveur est manquante.");return;}const auth=await sb.auth.getUser();if(auth.error||!auth.data.user){showLogin();return;}state.user=auth.data.user;const roles=await sb.from("seven_roles").select("id,user_id,hotel_id,role,full_name,active").eq("user_id",state.user.id).eq("active",true);if(roles.error||!roles.data?.length){await sb.auth.signOut();state.user=null;showLogin("Ce compte n'a pas encore reçu d'autorisation. Contactez la supervision.");return;}state.roles=roles.data;
 const hotels=await sb.from("hotels").select("id,name,slug,city,address,phone,email,description,active").order("name");if(hotels.error){showLogin("Impossible de charger les établissements.");return;}state.hotels=leadership()?hotels.data:hotels.data.filter(h=>h.active&&state.roles.some(r=>r.hotel_id===h.id));if(!state.hotels.length){showLogin("Aucun établissement attribué.");return;}state.hotelId=state.hotels[0].id;showApp();await Promise.all([loadAll(),window.SevenNotifications.start({supabase:sb,user:state.user.id,properties:state.hotels,navigate:goto,flash})]);}
-function goto(view){if((view==="management"&&!canManage())||(view==="access"&&!canManageAccess())||(view==="properties"&&!leadership()))return;if(view==="requests"&&!canHandle())return;if(view==="stays"&&!(canHandle()||currentRole()==="accountant"))view="rooms";state.view=view;document.querySelectorAll(".page").forEach(n=>n.classList.toggle("active",n.id===view+"Page"));document.querySelectorAll(".side-link").forEach(b=>b.classList.toggle("active",b.dataset.view===view));el("pageTitle").textContent=names[view][0];el("pageDescription").textContent=names[view][1];el("breadcrumb").textContent=names[view][0].toUpperCase();el("serviceForm").hidden=!(view==="services"&&canManage());document.querySelector(".sidebar").classList.remove("open");}
+function goto(view){if((view==="management"&&!canManage())||(view==="access"&&!canManageAccess())||(view==="properties"&&!leadership()))return;if(view==="requests"&&!canHandle())return;if(view==="stays"&&!(canHandle()||currentRole()==="accountant"))view="rooms";state.view=view;document.querySelectorAll(".page").forEach(n=>n.classList.toggle("active",n.id===view+"Page"));document.querySelectorAll(".side-link").forEach(b=>b.classList.toggle("active",b.dataset.view===view));el("pageTitle").textContent=names[view][0];el("pageDescription").textContent=names[view][1];el("breadcrumb").textContent=names[view][0].toUpperCase();el("serviceForm").hidden=!(view==="services"&&canManage());setSidebarOpen(false);}
 async function fetchFor(table,cols="*"){const q=sb.from(table).select(cols).eq("hotel_id",state.hotelId);const r=await q;if(r.error)throw r.error;return r.data||[];}
 function dateDisplay(v){return v?new Date(v).toLocaleDateString("fr-FR"):"—";}
 function table(headers,rows){if(!rows.length)return '<div class="empty">Aucune donnée à afficher pour cet établissement.</div>';return '<table><thead><tr>'+headers.map(h=>'<th>'+esc(h)+'</th>').join("")+'</tr></thead><tbody>'+rows.join("")+'</tbody></table>';}
@@ -450,7 +450,7 @@ async function setRoomStatus(id,status){
 }
 
 el("loginForm").addEventListener("submit",async e=>{e.preventDefault();if(!sb)return;el("signIn").disabled=true;el("loginMessage").textContent="";try{const r=await sb.auth.signInWithPassword({email:el("email").value.trim(),password:el("password").value});if(r.error)throw r.error;await bootstrap();}catch(err){el("loginMessage").textContent="Connexion impossible : vérifiez vos identifiants."; }finally{el("signIn").disabled=false;}});
-el("signOut").addEventListener("click",async()=>{window.SevenNotifications.stop();if(window.sevenDesktop)await window.sevenDesktop.clearSnapshot().catch(()=>{});await sb.auth.signOut();state.user=null;state.roles=[];showLogin();});
+el("signOut").addEventListener("click",async()=>{setSidebarOpen(false);window.SevenNotifications.stop();if(window.sevenDesktop)await window.sevenDesktop.clearSnapshot().catch(()=>{});await sb.auth.signOut();state.user=null;state.roles=[];showLogin();});
 el("hotelSwitcher").addEventListener("change",async e=>{state.hotelId=e.target.value;el("userRole").textContent=roleNames[currentRole()]||"Personnel";el("serviceForm").hidden=!(state.view==="services"&&canManage());el("roleHotel").value=state.hotelId;el("inviteHotel").value=state.hotelId;roleNav();await loadAll();});
 document.querySelectorAll("[data-view]").forEach(b=>b.addEventListener("click",()=>goto(b.dataset.view)));
 document.querySelectorAll("[data-goto]").forEach(b=>b.addEventListener("click",()=>goto(b.dataset.goto)));
@@ -718,7 +718,41 @@ el("propertyUpdateForm").addEventListener("submit",async e=>{
  }catch(error){console.error(error);flash("Modification impossible : "+readableError(error));}
 });
 
-el("mobileNav").addEventListener("click",()=>document.querySelector(".sidebar").classList.toggle("open"));
+/* Touch-friendly module drawer; scroll inside menu remains native vertical scrolling. */
+const sevenSidebar=el("sevenSidebar"),sevenBackdrop=el("sidebarBackdrop"),sevenMenuButton=el("mobileNav");
+const sevenMobile=()=>window.matchMedia("(max-width:750px)").matches;
+function setSidebarOpen(open){
+ const active=!!open&&sevenMobile()&&!el("appShell").hidden;
+ sevenSidebar.classList.toggle("open",active);
+ sevenBackdrop.classList.toggle("is-visible",active);
+ sevenBackdrop.setAttribute("aria-hidden",String(!active));
+ sevenMenuButton.setAttribute("aria-expanded",String(active));
+ sevenMenuButton.setAttribute("aria-label",active?"Fermer le menu des modules":"Ouvrir le menu des modules");
+ document.body.classList.toggle("seven-drawer-open",active);
+}
+sevenMenuButton.addEventListener("click",()=>setSidebarOpen(!sevenSidebar.classList.contains("open")));
+sevenBackdrop.addEventListener("click",()=>setSidebarOpen(false));
+window.addEventListener("keydown",e=>{if(e.key==="Escape"&&sevenSidebar.classList.contains("open")){setSidebarOpen(false);sevenMenuButton.focus();}});
+window.addEventListener("resize",()=>{if(!sevenMobile())setSidebarOpen(false);});
+let sevenSwipe=null;
+document.addEventListener("touchstart",e=>{
+ if(!sevenMobile()||!e.touches||e.touches.length!==1||el("appShell").hidden){sevenSwipe=null;return;}
+ const p=e.touches[0],open=sevenSidebar.classList.contains("open");
+ const insideMenu=sevenSidebar.contains(e.target);
+ // From the left edge to open; from inside the menu toward the left to close.
+ if((!open&&p.clientX<=32)||(open&&insideMenu)){
+   sevenSwipe={x:p.clientX,y:p.clientY,open};
+ }else sevenSwipe=null;
+},{passive:true});
+document.addEventListener("touchend",e=>{
+ if(!sevenSwipe||!e.changedTouches||e.changedTouches.length!==1)return;
+ const p=e.changedTouches[0],dx=p.clientX-sevenSwipe.x,dy=p.clientY-sevenSwipe.y,wasOpen=sevenSwipe.open;
+ sevenSwipe=null;
+ if(Math.abs(dy)>Math.abs(dx)*0.75||Math.abs(dx)<65)return; // preserve vertical menu scrolling
+ if(!wasOpen&&dx>65)setSidebarOpen(true);
+ else if(wasOpen&&dx< -65)setSidebarOpen(false);
+},{passive:true});
+document.addEventListener("touchcancel",()=>{sevenSwipe=null;},{passive:true});
 window.SevenNotifications.init();
 window.addEventListener("online",()=>{if(state.user&&state.hotelId)loadAll();});
 bootstrap().catch(e=>{console.error(e);showLogin("Service d'authentification indisponible.");});
