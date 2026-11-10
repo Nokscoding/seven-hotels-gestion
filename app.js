@@ -1,6 +1,6 @@
 (function(){"use strict";
 const cfg=window.SEVEN_CONFIG||{},sb=(cfg.url&&cfg.publishableKey&&window.supabase)?window.supabase.createClient(cfg.url,cfg.publishableKey):null;
-const state={user:null,roles:[],hotels:[],hotelId:"",view:"dashboard",requests:[],rooms:[],roomTypes:[],stays:[],services:[],attendance:[],rfid:[],allocatingRequestId:null};
+const state={user:null,roles:[],hotels:[],hotelId:"",view:"dashboard",requests:[],rooms:[],roomTypes:[],stays:[],services:[],attendance:[],employees:[],rfid:[],allocatingRequestId:null};
 const el=id=>document.getElementById(id),esc=v=>String(v??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const names={dashboard:["Vue d'ensemble","Toutes les informations essentielles de votre établissement."],requests:["Réservations à confirmer","Contactez les clients, vérifiez les disponibilités et confirmez les réservations."],stays:["Séjours & arrivées","Gérez les confirmations, arrivées et départs des clients."],rooms:["Gestion des chambres","Suivez la disponibilité opérationnelle des chambres."],services:["Espaces et services","Gérez les salles, restaurants et installations."],attendance:["Présences","Enregistrez les entrées et sorties de votre équipe."],access:["Accès et permissions","Contrôlez les autorisations par établissement."],notifications:["Notifications","Suivez les événements importants de vos établissements."],management:["Espace responsables","Pilotage des équipes, de l’hôtel et des opérations."],properties:["Établissements","Gérez les hôtels et appartements de la chaîne Seven."],rfid:["Cartes RFID","Registre et préparation de la gestion des accès."]};
 const statusNames={pending:"À contacter",confirmed:"Confirmée",checked_in:"Occupée",checked_out:"Terminé",no_show:"Non-présenté",approved:"Approuvée",declined:"Refusée",cancelled:"Annulée",available:"Disponible",occupied:"Occupée",cleaning:"Nettoyage",maintenance:"Maintenance",out_of_service:"Hors service"};
@@ -32,6 +32,7 @@ function roleNav(){
  document.querySelector(".leadership-link").hidden=!leadership();
  document.querySelector('[data-view="rfid"]').hidden=!["supervisor","director","manager","reception"].includes(currentRole());
  document.querySelector('[data-view="services"]').hidden=!["supervisor","director","manager","reception"].includes(currentRole());
+ document.querySelector('[data-view="attendance"]').hidden=!(canManage()||currentRole()==="accountant");
 }
 function configureRoleSelect(selectId,hotelWrapId,hotelSelectId){
  const select=el(selectId);
@@ -47,6 +48,15 @@ function configureRoleSelect(selectId,hotelWrapId,hotelSelectId){
  el(hotelWrapId).hidden=global;
  el(hotelSelectId).disabled=global||!leadership();
  if(!global)el(hotelSelectId).value=state.hotelId;
+ if(selectId==="inviteRole"){
+  document.querySelectorAll(".staff-employee-field").forEach(wrapper=>{
+   wrapper.hidden=global;
+   wrapper.querySelectorAll("input,select").forEach(field=>{
+    field.disabled=global;
+    if(field.id==="staffMonthlySalary")field.required=!global;
+   });
+  });
+ }
 }
 function populateHotelSelectors(){
  const entries=state.hotels.map(h=>'<option value="'+esc(h.id)+'">'+esc(h.name)+(h.active?"":" · Non publié")+'</option>').join("");
@@ -153,12 +163,19 @@ function renderRoomTypes(){
 function renderServices(){el("servicesTable").innerHTML=table(["Service","Type","Capacité","Publication"],state.services.map(r=>'<tr><td>'+esc(r.name)+'</td><td>'+esc(r.kind)+'</td><td>'+esc(r.capacity)+'</td><td>'+ (r.active?"Visible":"Non publié") +'</td></tr>'));}
 
 function renderAttendance(){
- const rows=state.attendance.slice().sort((a,b)=>new Date(b.clock_in)-new Date(a.clock_in)).map(r=>{
-  const employee=(state.allRoles||[]).find(x=>x.user_id===r.user_id&&x.hotel_id===state.hotelId);
-  const person=employee?.full_name||(r.user_id===state.user?.id?"Mon pointage":"Employé");
-  return '<tr><td>'+esc(person)+'</td><td>'+esc(dateDisplay(r.clock_in))+' '+esc(new Date(r.clock_in).toLocaleTimeString("fr-FR"))+'</td><td>'+(r.clock_out?esc(new Date(r.clock_out).toLocaleTimeString("fr-FR")):"—")+'</td><td>'+(r.clock_out?"Terminé":"Présent")+'</td></tr>';
+ const canWrite=canManage();
+ el("attendanceEntryPanel").hidden=!canWrite;
+ if(!el("attendanceDate").value)el("attendanceDate").value=todayLocal();
+ const employees=state.employees||[];
+ el("attendanceEmployee").innerHTML='<option value="">Choisir un salarié</option>'+employees.filter(x=>x.active).map(x=>
+  '<option value="'+esc(x.id)+'">'+esc(x.full_name)+' · '+esc(x.job_title)+'</option>'
+ ).join("");
+ const status={present:"Présent",late:"En retard",absent:"Absent",leave:"Congé",off:"Repos"};
+ const rows=state.attendance.slice().sort((a,b)=>String(b.work_date).localeCompare(String(a.work_date))).map(x=>{
+  const employee=employees.find(e=>e.id===x.employee_id);
+  return '<tr><td>'+esc(x.work_date)+'</td><td>'+esc(employee?.full_name||"Employé")+'</td><td>'+esc(status[x.status]||x.status)+'</td><td>'+esc(x.clock_in||"—")+'</td><td>'+esc(x.clock_out||"—")+'</td><td>'+esc(x.notes||"—")+'</td></tr>';
  });
- el("attendanceTable").innerHTML=table(["Employé","Entrée","Sortie","État"],rows);
+ el("attendanceTable").innerHTML=table(["Date","Employé","Statut","Arrivée","Départ","Observation"],rows);
 }
 function canRevokeRole(role){
  if(role.user_id===state.user?.id)return false;
@@ -309,14 +326,14 @@ async function rememberDesktopRooms(){
 async function loadAll(){
  const hotel=state.hotelId;
  try{
-  const [requests,rooms,roomTypes,stays,services,attendance,rfid]=await Promise.all([
+  const [requests,rooms,roomTypes,stays,services,attendance,employees,rfid]=await Promise.all([
     fetchFor("seven_booking_requests"),fetchFor("rooms"),
     fetchFor("room_types"),fetchFor("reservations"),
-    fetchFor("seven_service_resources"),fetchFor("seven_attendance"),
-    fetchFor("seven_rfid_cards")
+    fetchFor("seven_service_resources"),fetchFor("seven_attendance_register"),
+    fetchFor("seven_employees"),fetchFor("seven_rfid_cards")
   ]);
   if(hotel!==state.hotelId)return;
-  Object.assign(state,{requests,rooms,roomTypes,stays,services,attendance,rfid});
+  Object.assign(state,{requests,rooms,roomTypes,stays,services,attendance,employees,rfid});
   if(canManageAccess()){
    const r=await sb.from("seven_roles").select("id,user_id,hotel_id,role,full_name,active");
    state.allRoles=r.data||[];
@@ -534,8 +551,38 @@ el("roomTypeForm").addEventListener("submit",async e=>{
 });
 el("roomsTable").addEventListener("change",e=>{if(e.target.matches("[data-room]"))setRoomStatus(e.target.dataset.room,e.target.value);});
 el("serviceForm").addEventListener("submit",async e=>{e.preventDefault();if(!canManage()||!navigator.onLine)return flash("Action impossible hors connexion ou sans autorisation.");const d=new FormData(e.target);const r=await sb.from("seven_service_resources").insert({hotel_id:state.hotelId,name:String(d.get("name")).trim(),kind:String(d.get("kind")),capacity:Number(d.get("capacity")),active:false});if(r.error)return flash(r.error.message);e.target.reset();flash("Espace enregistré, non publié tant que ses informations ne sont pas validées.");await loadAll();});
-el("clockIn").addEventListener("click",async()=>{if(!navigator.onLine)return flash("Pointage indisponible hors connexion pour le moment.");if(state.attendance.some(r=>r.user_id===state.user.id&&!r.clock_out))return flash("Vous avez déjà une présence en cours.");const r=await sb.from("seven_attendance").insert({user_id:state.user.id,hotel_id:state.hotelId});if(r.error)flash(r.error.message);else{flash("Entrée enregistrée.");await loadAll();}});
-el("clockOut").addEventListener("click",async()=>{if(!navigator.onLine)return flash("Pointage indisponible hors connexion pour le moment.");const shift=state.attendance.find(r=>r.user_id===state.user.id&&!r.clock_out);if(!shift)return flash("Aucune présence en cours.");const r=await sb.from("seven_attendance").update({clock_out:new Date().toISOString()}).eq("id",shift.id).eq("user_id",state.user.id);if(r.error)flash(r.error.message);else{flash("Sortie enregistrée.");await loadAll();}});
+el("attendanceStatus").addEventListener("change",e=>{
+ const work=e.target.value==="present"||e.target.value==="late";
+ for(const id of ["attendanceIn","attendanceOut"]){
+  const node=el(id);node.disabled=!work;if(!work)node.value="";
+ }
+});
+el("attendanceRegisterForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const result=el("attendanceResult"),button=el("attendanceSubmit");
+ if(!canManage()||!navigator.onLine){result.textContent="Seul le gérant ou la direction peut enregistrer la présence.";return;}
+ const d=new FormData(e.target),employee_id=String(d.get("employee_id")||"");
+ const employee=state.employees.find(x=>x.id===employee_id&&x.hotel_id===state.hotelId);
+ if(!employee){result.textContent="Sélectionnez un salarié de cet établissement.";return;}
+ const work_date=String(d.get("work_date")||""),status=String(d.get("status")||"");
+ const isPresent=status==="present"||status==="late";
+ const clock_in=isPresent?String(d.get("clock_in")||"")||null:null;
+ const clock_out=isPresent?String(d.get("clock_out")||"")||null:null;
+ if(clock_out&&(!clock_in||clock_out<=clock_in)){result.textContent="Heures de présence invalides.";return;}
+ button.disabled=true;result.textContent="Enregistrement…";
+ try{
+  const response=await sb.from("seven_attendance_register").upsert({
+   hotel_id:state.hotelId,employee_id,work_date,status,clock_in,clock_out,
+   notes:String(d.get("notes")||"").trim()||null,recorded_by:state.user.id
+  },{onConflict:"employee_id,work_date"}).select("id").single();
+  if(response.error)throw response.error;
+  e.target.reset();
+  await loadAll();
+  result.textContent="Présence enregistrée par le gérant.";
+  flash(result.textContent);
+ }catch(error){console.error("Attendance error",error);result.textContent=readableError(error);}
+ finally{button.disabled=false;}
+});
 el("accessTable").addEventListener("click",async e=>{
  const btn=e.target.closest("[data-revoke]");
  if(!btn||!canManageAccess()||!navigator.onLine)return;
@@ -591,13 +638,19 @@ el("inviteForm").addEventListener("submit",async e=>{
  const email=String(data.get("email")||"").trim().toLowerCase();
  const full_name=String(data.get("full_name")||"").trim();
  const password=String(data.get("password")||"");
+ const job_title=String(data.get("job_title")||"").trim();
+ const monthly_salary=Number(data.get("monthly_salary"));
+ const salary_currency=String(data.get("salary_currency")||"USD");
+ if(!globalRole(role)&&(!job_title||!Number.isFinite(monthly_salary)||monthly_salary<0||!["USD","CDF"].includes(salary_currency))){
+  result.textContent="Indiquez le poste, le salaire mensuel et la devise.";return;
+ }
  if(!email.includes("@")||full_name.length<2){result.textContent="Nom et adresse e-mail invalides.";return;}
  if(password.length<12||password.length>128||!/[^A-Za-z0-9]/.test(password)||!/[A-Za-z]/.test(password)||!/[0-9]/.test(password)||/^\s|\s$/.test(password)){
   result.textContent="Mot de passe : 12 caractères minimum, avec des lettres, des chiffres et un symbole.";return;
  }
  button.disabled=true;result.textContent="Création sécurisée du compte en cours…";
  try{
-  const response=await sb.functions.invoke("seven-create-staff",{body:{email,full_name,role,hotel_id,password}});
+  const response=await sb.functions.invoke("seven-create-staff",{body:{email,full_name,role,hotel_id,password,job_title,monthly_salary,salary_currency}});
   if(response.error)throw response.error;
   if(!response.data?.ok)throw Error(response.data?.error||"Création impossible");
   result.textContent="Compte "+email+" créé et accès activé. Communiquez les identifiants par un canal privé.";
