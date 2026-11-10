@@ -76,7 +76,18 @@
 </div>
 </section>
 <section class="page" id="servicesPage"><div class="panel"><div class="panel-heading"><h2>Espaces & services</h2><span class="hint">Restaurant, salles d'événements, sport & bien-être.</span></div><div id="servicesTable" class="table-container"></div></div><form id="serviceForm" class="panel edit-panel" hidden><h2>Ajouter un espace</h2><div class="form-row"><label>Nom <input name="name" required maxlength="100"></label><label>Type <select name="kind"><option value="restaurant">Restaurant</option><option value="event">Événementiel</option><option value="fitness">Sport et bien-être</option></select></label><label>Capacité <input name="capacity" type="number" min="1" max="10000" required></label></div><button class="primary" type="submit">Enregistrer l'espace</button></form></section>
-<section class="page" id="attendancePage"><div class="panel"><div class="panel-heading"><h2>Pointage du personnel</h2><span class="hint">Enregistrer vos entrées et sorties.</span></div><div class="attendance-actions"><button class="primary" type="button" id="clockIn">Marquer mon entrée</button><button class="outline" type="button" id="clockOut">Marquer ma sortie</button></div><div id="attendanceTable" class="table-container"></div></div></section>
+<section class="page" id="attendancePage"><div class="panel"><div class="panel-heading"><div><span class="overline">PERSONNEL SEVEN</span><h2>Registre des présences</h2><p class="message-note">Le gérant inscrit les présences de ses employés. Les salariés ne pointent pas eux-mêmes dans ce module.</p></div></div><div id="attendanceTable" class="table-container"></div></div>
+<div class="panel edit-panel manager-only" id="attendanceEntryPanel" hidden><h2>Inscrire une présence</h2>
+<form id="attendanceRegisterForm"><div class="form-row">
+<label>Employé<select name="employee_id" id="attendanceEmployee" required></select></label>
+<label>Date<input name="work_date" id="attendanceDate" type="date" required></label>
+<label>Statut<select name="status" id="attendanceStatus"><option value="present">Présent</option><option value="late">En retard</option><option value="absent">Absent</option><option value="leave">Congé</option><option value="off">Repos</option></select></label>
+<label>Heure d'arrivée<input name="clock_in" id="attendanceIn" type="time"></label>
+<label>Heure de départ<input name="clock_out" id="attendanceOut" type="time"></label>
+<label class="wide">Observation<input name="notes" maxlength="400" placeholder="Facultatif"></label></div>
+<button class="primary" type="submit" id="attendanceSubmit">Enregistrer la présence</button>
+<p class="hint" id="attendanceResult" role="status"></p>
+</form></div></section>
 <section class="page" id="accessPage">
 <div class="panel"><div class="panel-heading"><div><h2>Comptes & autorisations</h2><p class="message-note">L'interface et les données de chaque compte dépendent de son rôle. Seul le modérateur peut attribuer le rôle de modérateur.</p></div></div><div id="accessTable" class="table-container"></div></div>
 <div class="panel edit-panel" id="invitePanel"><div class="panel-heading"><div><span class="overline">GESTION DES COLLABORATEURS</span><h2>Créer un accès employé ou responsable</h2></div></div>
@@ -85,6 +96,9 @@
 <label>Nom complet<input name="full_name" minlength="2" maxlength="160" required placeholder="Nom du collaborateur"></label>
 <label>Mot de passe initial<input id="staffPassword" name="password" type="password" minlength="12" maxlength="128" required autocomplete="new-password" placeholder="12 caractères minimum"></label>
 <label class="checkbox-line"><input type="checkbox" id="staffPasswordVisible"> Afficher le mot de passe</label>
+<label class="staff-employee-field">Poste ou fonction exacte<input name="job_title" id="staffJobTitle" maxlength="120" placeholder="Ex. Réceptionniste"></label>
+<label class="staff-employee-field">Salaire mensuel<input name="monthly_salary" id="staffMonthlySalary" type="number" min="0" step="0.01" required placeholder="0.00"></label>
+<label class="staff-employee-field">Devise salariale<select name="salary_currency" id="staffSalaryCurrency"><option value="USD">USD</option><option value="CDF">CDF</option></select></label>
 <label>Fonction<select name="role" id="inviteRole" required><option value="manager">Gérant d'établissement</option><option value="reception">Réception</option><option value="housekeeping">Entretien</option><option value="accountant">Comptabilité</option><option value="director">Directeur — tous les hôtels</option><option value="supervisor">Modérateur général</option></select></label>
 <label id="inviteHotelWrap">Établissement<select name="hotel_id" id="inviteHotel"></select></label>
 </div><p class="hint">Le compte est créé immédiatement, sans invitation par e-mail. Définissez un mot de passe unique de 12 caractères minimum avec lettres, chiffres et symbole. Transmettez-le au collaborateur par un canal privé et demandez-lui de le changer.</p><button type="submit" class="primary" id="inviteSubmit">Créer le compte et activer l’accès</button><div id="inviteResult" role="status" aria-live="polite" class="invite-result"></div></form></div>
