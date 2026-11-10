@@ -249,6 +249,31 @@ function renderManagement(){
  }).join("");
 }
 
+function renderReceptionOptions(){
+ const box=el("receptionCreationPanel");
+ if(!box)return;
+ box.hidden=!canHandle();
+ if(!canHandle())return;
+ const startInput=el("receptionCheckIn"),endInput=el("receptionCheckOut"),roomInput=el("receptionRoom");
+ const today=todayLocal();
+ if(!startInput.value)startInput.value=today;
+ startInput.min=today;
+ endInput.min=datePlusOne(startInput.value);
+ if(!endInput.value||endInput.value<=startInput.value)endInput.value=datePlusOne(startInput.value);
+ const previous=roomInput.value;
+ const options=state.rooms.filter(r=>{
+  const type=state.roomTypes.find(t=>t.id===r.room_type_id);
+  return r.active&&type?.active&&
+    !["maintenance","out_of_service"].includes(r.operational_status)&&
+    !(startInput.value===today&&["occupied","cleaning"].includes(r.operational_status))&&
+    !stayBlocksRoom(r.id,startInput.value,endInput.value);
+ }).sort((a,b)=>String(a.number).localeCompare(String(b.number),"fr"));
+ roomInput.innerHTML='<option value="">Sélectionner une chambre</option>'+options.map(r=>{
+  const type=state.roomTypes.find(t=>t.id===r.room_type_id);
+  return '<option value="'+esc(r.id)+'">'+esc(r.number)+' · '+esc(type?.name||"Chambre")+'</option>';
+ }).join("");
+ if(options.some(r=>r.id===previous))roomInput.value=previous;
+}
 function render(){
  const date=todayLocal(),tomorrow=datePlusOne(date);
  const pending=state.requests.filter(r=>r.status==="pending").length;
@@ -256,7 +281,7 @@ function render(){
  el("metricRooms").textContent=state.rooms.length;
  el("metricAvailable").textContent=state.rooms.filter(r=>r.active&&r.operational_status==="available"&&!stayBlocksRoom(r.id,date,tomorrow)).length;
  el("metricServices").textContent=state.services.length;
- renderRequests();renderStays();renderRooms();renderRoomTypes();
+ renderRequests();renderStays();renderReceptionOptions();renderRooms();renderRoomTypes();
  renderServices();renderAttendance();renderRFID();if(canManageAccess())renderRoles();if(canManage())renderManagement();if(leadership())renderProperties();
 }
 async function rememberDesktopRooms(){
@@ -428,6 +453,49 @@ el("allocationDialog").addEventListener("click",e=>{
  if(e.target===el("allocationDialog"))el("allocationDialog").close();
 });
 el("availabilityDate").addEventListener("change",renderRooms);
+el("receptionCheckIn").addEventListener("change",renderReceptionOptions);
+el("receptionCheckOut").addEventListener("change",renderReceptionOptions);
+el("receptionBookingForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const result=el("receptionBookingResult"),button=el("receptionBookingSubmit");
+ if(!canHandle()||!navigator.onLine){result.textContent="Accès refusé ou connexion indisponible.";return;}
+ const data=new FormData(e.target);
+ const check_in=String(data.get("check_in")||""),check_out=String(data.get("check_out")||"");
+ const room_id=String(data.get("room_id")||"");
+ const immediate=el("receptionDirectCheckIn").checked;
+ if(!state.rooms.some(r=>r.id===room_id)){result.textContent="Sélectionnez une chambre disponible.";return;}
+ if(!check_in||!check_out||check_out<=check_in){result.textContent="Les dates sont invalides.";return;}
+ if(immediate&&check_in!==todayLocal()){result.textContent="Le check-in immédiat est possible uniquement aujourd’hui.";return;}
+ button.disabled=true;result.textContent="Enregistrement de la réservation…";
+ try{
+  const response=await sb.rpc("create_staff_reservation",{
+   p_room_id:room_id,p_check_in:check_in,p_check_out:check_out,
+   p_guest_name:String(data.get("guest_name")||"").trim(),
+   p_guest_phone:String(data.get("guest_phone")||"").trim(),
+   p_guest_email:String(data.get("guest_email")||"").trim()||null,
+   p_guests:Number(data.get("guests")||1),p_status:"confirmed",
+   p_notes:String(data.get("notes")||"").trim()||null
+  });
+  if(response.error)throw response.error;
+  const booking=Array.isArray(response.data)?response.data[0]:response.data;
+  if(!booking?.reservation_id)throw Error("reservation_without_id");
+  let message="Réservation "+(booking.reference||"")+" créée et confirmée.";
+  if(immediate){
+   const transition=await sb.rpc("seven_transition_stay",{p_reservation_id:booking.reservation_id,p_action:"check_in"});
+   if(transition.error){
+    message+=" Le check-in n’a pas été validé : "+readableError(transition.error)+" Réessayez depuis les séjours.";
+   }else message+=" Arrivée du client enregistrée à la réception.";
+  }
+  e.target.reset();
+  await loadAll();
+  result.textContent=message;
+  flash(message);
+ }catch(error){
+  console.error("Reception booking failed",error);
+  result.textContent=readableError(error);
+ }finally{button.disabled=false;}
+});
+
 el("roomCreationForm").addEventListener("submit",async e=>{
  e.preventDefault();
  if(!canManage()||!navigator.onLine)return flash("Action réservée à la direction, avec connexion.");
