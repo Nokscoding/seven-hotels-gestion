@@ -194,7 +194,7 @@ function renderStays(){
    if(s.status==="checked_in"){
     buttons.push('<button type="button" class="action-button action-primary" data-stay="'+esc(s.id)+'" data-action="check_out">Check-out</button>');
      if(window.sevenDesktop?.openRfidStudio){
-      buttons.push('<button type="button" class="action-button" data-rfid-prepare="'+esc(s.id)+'">Préparer la carte</button>');
+      buttons.push('<button type="button" class="action-button" data-rfid-prepare="'+esc(s.id)+'">Créer la carte</button>');
      }
    }
    if(["confirmed","pending"].includes(s.status)){
@@ -324,7 +324,7 @@ window.SevenRfidContext=()=>{
   role:currentRole(),
   rooms:state.rooms.filter(r=>r.hotel_id===state.hotelId).map(r=>({id:r.id,number:r.number,floor:r.floor||""})),
   stays:state.stays.filter(s=>s.hotel_id===state.hotelId&&s.status==="checked_in")
-   .map(s=>({id:s.id,hotel_id:s.hotel_id,room_id:s.room_id,reference:s.reference,check_in:s.check_in,check_out:s.check_out,status:s.status}))
+   .map(s=>({id:s.id,hotel_id:s.hotel_id,room_id:s.room_id,reference:s.reference,guest_name:s.guest_name,check_in:s.check_in,check_out:s.check_out,status:s.status}))
  };
 };
 function renderRFID(){
