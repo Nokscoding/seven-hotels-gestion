@@ -194,7 +194,7 @@ function renderStays(){
    }
    if(s.status==="checked_in"){
     buttons.push('<button type="button" class="action-button action-primary" data-stay="'+esc(s.id)+'" data-action="check_out">Check-out</button>');
-     if(window.sevenDesktop?.openRfidStudio){
+     if(/(?:\b71\b|seventy[ -]?one)/i.test(currentHotel()?.name||'')){
       buttons.push('<button type="button" class="action-button" data-rfid-prepare="'+esc(s.id)+'">Préparer la carte</button>');
      }
    }
@@ -365,6 +365,7 @@ window.SevenRfidLookupCard=async ({sequence})=>{
   return {ok:false,found:false,message:"Impossible de consulter le dossier client pour cette carte. Vérifiez la connexion ou les autorisations."};
  }
 };
+window.SevenRfidSessionToken=async()=>{if(!sb||!state.user||!state.hotelId)return null;const result=await sb.auth.getSession();return result.data?.session?.access_token||null;};
 window.SevenRfidContext=()=>{
  if(!state.user||!state.hotelId||!canHandle())return null;
  return {
@@ -442,7 +443,7 @@ function renderReceptionToday(){
   .sort((a,b)=>String(b.created_at||"").localeCompare(String(a.created_at||""))).slice(0,40);
  const rows=current.map(s=>{
   const room=state.rooms.find(r=>r.id===s.room_id);
-  const action=window.sevenDesktop?.runNativeRfid
+  const action=/(?:\b71\b|seventy[ -]?one)/i.test(currentHotel()?.name||'')
     ?'<button type="button" class="action-button action-primary" data-rfid-prepare="'+esc(s.id)+'">Créer la carte</button>'
     :'Séjour en cours';
   return '<tr><td>'+esc(s.guest_name||"Client")+'</td><td>'+esc(room?.number||"—")+
@@ -523,7 +524,7 @@ async function loadAll(){
    state.allRoles=r.data||[];
   }
   render();
-  if(window.sevenDesktop)window.dispatchEvent(new Event("seven:rfid-context"));
+  window.dispatchEvent(new Event("seven:rfid-context"));
   if(window.sevenDesktop)rememberDesktopRooms();
  }catch(e){
   console.error(e);flash(navigator.onLine?"Certaines données sont indisponibles. Vérifiez vos accès ou réessayez.":"Connexion indisponible : seules les données synchronisées peuvent être consultées.");
@@ -712,7 +713,7 @@ el("receptionBookingForm").addEventListener("submit",async e=>{
    const after=el("receptionNextAction"),card=el("receptionIssueCard");
    after.hidden=false;
    el("receptionNextTitle").textContent="Client enregistré, chambre attribuée.";
-   if(window.sevenDesktop?.runNativeRfid){
+   if(/(?:\b71\b|seventy[ -]?one)/i.test(currentHotel()?.name||'')){
     el("receptionNextText").textContent="Vous pouvez préparer sa carte de chambre.";
     card.hidden=false;
     card.setAttribute("data-rfid-prepare",String(booking.reservation_id));
